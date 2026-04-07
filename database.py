@@ -45,7 +45,18 @@ def view_expenses():
     return rows
 
 
-def update_expense(id, expense_name, category, amount, date, payment_method, notes):
+def get_expense_by_id(expense_id):
+    conn = sqlite3.connect("expenses.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM expenses WHERE id = ?", (expense_id,))
+    row = cursor.fetchone()
+
+    conn.close()
+    return row
+
+
+def update_expense(expense_id, expense_name, category, amount, date, payment_method, notes):
     conn = sqlite3.connect("expenses.db")
     cursor = conn.cursor()
 
@@ -53,17 +64,17 @@ def update_expense(id, expense_name, category, amount, date, payment_method, not
     UPDATE expenses
     SET expense_name = ?, category = ?, amount = ?, date = ?, payment_method = ?, notes = ?
     WHERE id = ?
-    """, (expense_name, category, amount, date, payment_method, notes, id))
+    """, (expense_name, category, amount, date, payment_method, notes, expense_id))
 
     conn.commit()
     conn.close()
 
 
-def delete_expense(id):
+def delete_expense(expense_id):
     conn = sqlite3.connect("expenses.db")
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM expenses WHERE id = ?", (id,))
+    cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
 
     conn.commit()
     conn.close()
@@ -79,8 +90,8 @@ def search_expenses(keyword):
     """, (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"))
 
     rows = cursor.fetchall()
-    conn.close()
 
+    conn.close()
     return rows
 
 
