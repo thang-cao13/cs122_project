@@ -342,7 +342,7 @@ if phone_upload_token:
         st.success("Receipt uploaded successfully. Return to your desktop and click 'Check for uploaded receipt'.")
 
 else:
-    st.title("💰 Expense Tracker Dashboard")
+    st.title("Expense Tracker Dashboard")
     st.caption("Track, edit, analyze, and visualize your expenses")
 
     menu = [
