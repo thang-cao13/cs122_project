@@ -1,7 +1,7 @@
 import sqlite3
 
 
-def create_table():
+def create_tables():
     conn = sqlite3.connect("expenses.db")
     cursor = conn.cursor()
 
@@ -14,6 +14,17 @@ def create_table():
         date TEXT NOT NULL,
         payment_method TEXT,
         notes TEXT
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS receipt_uploads (
+        token TEXT PRIMARY KEY,
+        image_data BLOB NOT NULL,
+        filename TEXT,
+        mime_type TEXT,
+        uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        is_processed INTEGER DEFAULT 0
     )
     """)
 
@@ -95,4 +106,32 @@ def search_expenses(keyword):
     return rows
 
 
-create_table()
+def save_receipt_upload(token, image_data, filename, mime_type):
+    conn = sqlite3.connect("expenses.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR REPLACE INTO receipt_uploads (token, image_data, filename, mime_type, is_processed)
+    VALUES (?, ?, ?, ?, 0)
+    """, (token, image_data, filename, mime_type))
+
+    conn.commit()
+    conn.close()
+
+
+def get_receipt_upload_by_token(token):
+    conn = sqlite3.connect("expenses.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT token, image_data, filename, mime_type, uploaded_at, is_processed
+    FROM receipt_uploads
+    WHERE token = ?
+    """, (token,))
+    row = cursor.fetchone()
+
+    conn.close()
+    return row
+
+
+create_tables()

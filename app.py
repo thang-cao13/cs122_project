@@ -1,9 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import qrcode
 import pytesseract
 import re
+import uuid
 
+from io import BytesIO
 from datetime import datetime
 from PIL import Image, ImageOps, ImageFilter
 from database import (
@@ -13,156 +16,59 @@ from database import (
     update_expense,
     delete_expense,
     search_expenses,
+    save_receipt_upload,
+    get_receipt_upload_by_token,
 )
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
-st.set_page_config(
-    page_title="Expense Tracker",
-    page_icon="",
-    layout="wide"
-)
+st.set_page_config(page_title="Expense Tracker Dashboard", page_icon="💰", layout="wide")
+
+APP_URL = "https://cs122project-abud3w8vhbshdczjzvnftw.streamlit.app/"
 
 st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    .stApp {
-        background: linear-gradient(180deg, #0b0f19 0%, #111827 100%);
+    <style>
+    .main {
+        padding-top: 1rem;
     }
 
     .block-container {
         padding-top: 1.2rem;
-        padding-bottom: 2rem;
+        padding-bottom: 1.5rem;
         padding-left: 2rem;
         padding-right: 2rem;
-        max-width: 1400px;
     }
 
     section[data-testid="stSidebar"] {
-        background: rgba(17, 24, 39, 0.95);
         border-right: 1px solid rgba(255,255,255,0.08);
     }
 
-    section[data-testid="stSidebar"] .stRadio > div {
-        gap: 0.35rem;
-    }
-
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] div {
-        font-size: 0.97rem;
-    }
-
-    .hero-card {
-        background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 24px;
-        padding: 1.4rem 1.5rem;
-        margin-bottom: 1.25rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.20);
-    }
-
-    .hero-title {
-        font-size: 2rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        color: #f9fafb;
-        margin-bottom: 0.3rem;
-    }
-
-    .hero-subtitle {
-        color: #9ca3af;
-        font-size: 1rem;
-        margin-bottom: 0;
-    }
-
-    .section-card {
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 22px;
-        padding: 1.15rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.14);
-    }
-
-    .section-title {
-        font-size: 1.05rem;
-        font-weight: 600;
-        color: #f3f4f6;
-        margin-bottom: 0.8rem;
-    }
-
     div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, #141b2d 0%, #111827 100%);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 20px;
-        padding: 1rem;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+        background: #111827;
+        border: 1px solid #374151;
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
 
     div[data-testid="stMetric"] label {
-        color: #9ca3af !important;
+        color: #d1d5db !important;
         font-weight: 600;
     }
 
-    div[data-testid="stMetric"] > div {
-        color: #f9fafb !important;
+    div[data-testid="stMetric"] div {
+        color: white !important;
     }
 
-    div[data-testid="stDataFrame"] {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        overflow: hidden;
-    }
-
-    .stButton > button {
-        border-radius: 14px;
-        height: 2.9rem;
-        border: 1px solid rgba(255,255,255,0.08);
-        background: linear-gradient(180deg, #f9fafb 0%, #e5e7eb 100%);
-        color: #111827;
-        font-weight: 600;
-    }
-
-    .stDownloadButton > button {
-        border-radius: 14px;
-        height: 2.9rem;
-        border: 1px solid rgba(255,255,255,0.08);
-        background: transparent;
-        color: #f9fafb;
-        font-weight: 600;
-    }
-
-    .stTextInput input,
-    .stTextArea textarea,
-    .stNumberInput input,
-    .stDateInput input {
-        border-radius: 14px !important;
-    }
-
-    .small-muted {
+    .small-note {
         color: #9ca3af;
         font-size: 0.92rem;
     }
-</style>
+    </style>
 """, unsafe_allow_html=True)
 
-menu = [
-    "Add Expense",
-    "View Expenses",
-    "Edit Expense",
-    "Delete Expense",
-    "Search Expense",
-    "Scan Receipt",
-    "Reports"
-]
-
-choice = st.sidebar.radio("Navigation", menu)
+query_params = st.query_params
+phone_upload_token = str(query_params.get("phone_upload", ""))
 
 category_options = [
     "Food",
@@ -182,25 +88,8 @@ payment_options = [
     "Other"
 ]
 
-
-def render_header(title, subtitle):
-    st.markdown(
-        f"""
-        <div class="hero-card">
-            <div class="hero-title">{title}</div>
-            <div class="hero-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-def section_start(title):
-    st.markdown(f'<div class="section-card"><div class="section-title">{title}</div>', unsafe_allow_html=True)
-
-
-def section_end():
-    st.markdown("</div>", unsafe_allow_html=True)
+if "desktop_upload_token" not in st.session_state:
+    st.session_state.desktop_upload_token = None
 
 
 def parse_date(date_string):
@@ -208,7 +97,7 @@ def parse_date(date_string):
 
 
 def make_label(expense):
-    return f"{expense[1]} | {expense[2]} | {float(expense[3]):.2f} | {expense[4]}"
+    return f"{expense[1]} | {expense[2]} | ${float(expense[3]):.2f} | {expense[4]}"
 
 
 def load_dataframe():
@@ -331,9 +220,20 @@ def parse_receipt_text(text):
     }
 
 
-def render_receipt_result(uploaded_file, source_name):
+def generate_qr_code_bytes(url):
+    qr = qrcode.QRCode(box_size=8, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def render_receipt_result_from_pil(image, source_name):
     try:
-        image = Image.open(uploaded_file)
         st.image(image, caption=f"{source_name} preview", width=700)
 
         with st.spinner("Reading receipt..."):
@@ -394,7 +294,7 @@ def render_receipt_result(uploaded_file, source_name):
                 payment_method,
                 notes
             )
-            st.success("Scanned expense saved.")
+            st.success("Scanned expense saved!")
             st.rerun()
 
     except pytesseract.pytesseract.TesseractNotFoundError:
@@ -403,351 +303,430 @@ def render_receipt_result(uploaded_file, source_name):
         st.error(f"Could not process receipt: {e}")
 
 
-if choice == "Add Expense":
-    render_header("Expense Tracker", "Add a new expense with a cleaner, more structured form.")
+def render_receipt_result_from_upload(uploaded_file, source_name):
+    image = Image.open(uploaded_file)
+    render_receipt_result_from_pil(image, source_name)
 
-    col1, col2 = st.columns(2)
 
-    with col1:
-        section_start("Expense Details")
-        expense_name = st.text_input("Expense Name")
-        category = st.selectbox("Category", category_options)
-        amount = st.number_input("Amount", min_value=0.0, format="%.2f")
-        section_end()
+if phone_upload_token:
+    st.title("📱 Upload Receipt From Phone")
+    st.caption("Take a receipt photo on your phone and send it back to your desktop session.")
 
-    with col2:
-        section_start("Payment Details")
-        date = st.date_input("Date")
-        payment_method = st.selectbox("Payment Method", payment_options)
-        notes = st.text_area("Notes")
-        section_end()
+    st.info("Allow camera permission, take the picture, then submit it. After that, refresh the desktop page.")
 
-    if st.button("Add Expense", use_container_width=True):
-        add_expense(
-            expense_name,
-            category,
-            amount,
-            str(date),
-            payment_method,
-            notes
+    camera_receipt = st.camera_input("Take receipt photo", key="phone_camera_capture")
+
+    if camera_receipt is not None:
+        image_bytes = camera_receipt.getvalue()
+        save_receipt_upload(
+            phone_upload_token,
+            image_bytes,
+            "phone_camera.jpg",
+            "image/jpeg"
         )
-        st.success("Expense added.")
-        st.rerun()
-
-elif choice == "View Expenses":
-    render_header("All Expenses", "Browse your saved expenses and export them as a CSV file.")
-
-    df = load_dataframe()
-
-    if not df.empty:
-        section_start("Expense Table")
-        st.dataframe(df, use_container_width=True, height=460)
-        section_end()
-
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Download CSV",
-            csv,
-            "expenses.csv",
-            "text/csv",
-            use_container_width=True
-        )
-    else:
-        st.warning("No expenses found.")
-
-elif choice == "Edit Expense":
-    render_header("Edit Expense", "Find an expense by keyword and update its details.")
-
-    keyword = st.text_input("Search for the expense you want to edit")
-
-    if keyword:
-        matches = search_expenses(keyword)
-
-        if matches:
-            match_df = pd.DataFrame(
-                matches,
-                columns=["ID", "Name", "Category", "Amount", "Date", "Payment", "Notes"]
-            )
-
-            section_start("Matching Expenses")
-            st.dataframe(match_df, use_container_width=True, height=260)
-            section_end()
-
-            selected = st.selectbox(
-                "Select expense to edit",
-                matches,
-                format_func=make_label
-            )
-
-            selected_expense = get_expense_by_id(selected[0])
-
-            if selected_expense:
-                current_id = selected_expense[0]
-                current_name = selected_expense[1]
-                current_category = selected_expense[2]
-                current_amount = float(selected_expense[3])
-                current_date = parse_date(selected_expense[4])
-                current_payment = selected_expense[5]
-                current_notes = selected_expense[6] or ""
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    section_start("Edit Main Details")
-                    new_name = st.text_input("Expense Name", value=current_name)
-                    new_category = st.selectbox(
-                        "Category",
-                        category_options,
-                        index=category_options.index(current_category)
-                    )
-                    new_amount = st.number_input(
-                        "Amount",
-                        value=current_amount,
-                        min_value=0.0,
-                        format="%.2f"
-                    )
-                    section_end()
-
-                with col2:
-                    section_start("Edit Payment Details")
-                    new_date = st.date_input("Date", value=current_date)
-                    new_payment = st.selectbox(
-                        "Payment Method",
-                        payment_options,
-                        index=payment_options.index(current_payment)
-                    )
-                    new_notes = st.text_area("Notes", value=current_notes)
-                    section_end()
-
-                if st.button("Save Changes", use_container_width=True):
-                    update_expense(
-                        current_id,
-                        new_name,
-                        new_category,
-                        new_amount,
-                        str(new_date),
-                        new_payment,
-                        new_notes
-                    )
-                    st.success("Expense updated.")
-                    st.rerun()
-        else:
-            st.warning("No matching expenses found.")
-    else:
-        st.info("Enter a keyword like expense name, category, payment method, or notes.")
-
-elif choice == "Delete Expense":
-    render_header("Delete Expense", "Select an expense record and remove it from the database.")
-
-    df = load_dataframe()
-
-    if not df.empty:
-        section_start("Current Expenses")
-        st.dataframe(df[["ID", "Name", "Category", "Amount", "Date"]], use_container_width=True, height=320)
-        section_end()
-
-        data = view_expenses()
-        selected = st.selectbox(
-            "Select expense to delete",
-            data,
-            format_func=make_label
-        )
-
-        if st.button("Delete Expense", use_container_width=True):
-            delete_expense(selected[0])
-            st.success("Expense deleted.")
-            st.rerun()
-    else:
-        st.warning("No expenses found.")
-
-elif choice == "Search Expense":
-    render_header("Search Expense", "Search by keyword across name, category, payment method, and notes.")
-
-    keyword = st.text_input("Keyword")
-
-    if st.button("Search", use_container_width=True):
-        results = search_expenses(keyword)
-
-        if results:
-            df = pd.DataFrame(
-                results,
-                columns=["ID", "Name", "Category", "Amount", "Date", "Payment", "Notes"]
-            )
-            section_start("Search Results")
-            st.dataframe(df, use_container_width=True, height=360)
-            section_end()
-        else:
-            st.warning("No matching expenses found.")
-
-elif choice == "Scan Receipt":
-    render_header("Scan Receipt", "Upload a receipt image and let the app auto-fill the expense form.")
+        st.success("Receipt uploaded successfully. Return to your desktop and click 'Check for uploaded receipt'.")
 
     uploaded_receipt = st.file_uploader(
-        "Upload receipt image",
+        "Or upload a receipt image from your phone",
         type=["png", "jpg", "jpeg"],
-        key="desktop_receipt_upload"
+        key="phone_file_upload"
     )
 
     if uploaded_receipt is not None:
-        render_receipt_result(uploaded_receipt, "desktop_upload")
+        save_receipt_upload(
+            phone_upload_token,
+            uploaded_receipt.getvalue(),
+            uploaded_receipt.name,
+            uploaded_receipt.type or "image/jpeg"
+        )
+        st.success("Receipt uploaded successfully. Return to your desktop and click 'Check for uploaded receipt'.")
 
-elif choice == "Reports":
-    render_header("Reports", "Explore trends, categories, payment patterns, and summary insights.")
+else:
+    st.title("💰 Expense Tracker Dashboard")
+    st.caption("Track, edit, analyze, and visualize your expenses")
 
-    df = load_dataframe()
+    menu = [
+        "Add Expense",
+        "View Expenses",
+        "Edit Expense",
+        "Delete Expense",
+        "Search Expense",
+        "Scan Receipt",
+        "Reports"
+    ]
 
-    if not df.empty:
-        section_start("Filters")
-        filter_col1, filter_col2, filter_col3 = st.columns(3)
+    choice = st.sidebar.radio("Menu", menu)
 
-        with filter_col1:
-            min_date = df["Date"].min().date()
-            max_date = df["Date"].max().date()
-            date_range = st.date_input(
-                "Date Range",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date
+    if choice == "Add Expense":
+        st.subheader("Add New Expense")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            expense_name = st.text_input("Expense Name")
+            category = st.selectbox("Category", category_options)
+            amount = st.number_input("Amount", min_value=0.0, format="%.2f")
+
+        with col2:
+            date = st.date_input("Date")
+            payment_method = st.selectbox("Payment Method", payment_options)
+            notes = st.text_area("Notes")
+
+        if st.button("Add Expense", use_container_width=True):
+            add_expense(
+                expense_name,
+                category,
+                amount,
+                str(date),
+                payment_method,
+                notes
             )
+            st.success("Expense added!")
+            st.rerun()
 
-        with filter_col2:
-            selected_categories = st.multiselect(
-                "Categories",
-                options=sorted(df["Category"].dropna().unique().tolist()),
-                default=sorted(df["Category"].dropna().unique().tolist())
+    elif choice == "View Expenses":
+        st.subheader("All Expenses")
+
+        df = load_dataframe()
+
+        if not df.empty:
+            st.dataframe(df, use_container_width=True)
+
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download CSV",
+                csv,
+                "expenses.csv",
+                "text/csv",
+                use_container_width=True
             )
-
-        with filter_col3:
-            selected_payments = st.multiselect(
-                "Payment Methods",
-                options=sorted(df["Payment"].dropna().unique().tolist()),
-                default=sorted(df["Payment"].dropna().unique().tolist())
-            )
-        section_end()
-
-        filtered_df = df.copy()
-
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            start_date, end_date = date_range
-            filtered_df = filtered_df[
-                (filtered_df["Date"].dt.date >= start_date) &
-                (filtered_df["Date"].dt.date <= end_date)
-            ]
-
-        if selected_categories:
-            filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
-
-        if selected_payments:
-            filtered_df = filtered_df[filtered_df["Payment"].isin(selected_payments)]
-
-        if filtered_df.empty:
-            st.warning("No data matches your filters.")
         else:
-            total_spending = filtered_df["Amount"].sum()
-            total_transactions = len(filtered_df)
-            average_expense = filtered_df["Amount"].mean()
-            top_category = filtered_df.groupby("Category")["Amount"].sum().idxmax()
+            st.warning("No expenses found.")
 
-            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-            kpi1.metric("Total Spending", f"{total_spending:,.2f}")
-            kpi2.metric("Transactions", f"{total_transactions}")
-            kpi3.metric("Average Expense", f"{average_expense:,.2f}")
-            kpi4.metric("Top Category", top_category)
+    elif choice == "Edit Expense":
+        st.subheader("Edit Expense")
 
-            section_start("Visualization Options")
-            chart_col1, chart_col2 = st.columns(2)
+        keyword = st.text_input("Search for the expense you want to edit")
 
-            with chart_col1:
-                chart_type = st.selectbox(
-                    "Chart Type",
-                    ["Bar Chart", "Pie Chart", "Line Chart"]
+        if keyword:
+            matches = search_expenses(keyword)
+
+            if matches:
+                match_df = pd.DataFrame(
+                    matches,
+                    columns=["ID", "Name", "Category", "Amount", "Date", "Payment", "Notes"]
+                )
+                st.dataframe(match_df, use_container_width=True)
+
+                selected = st.selectbox(
+                    "Select expense to edit",
+                    matches,
+                    format_func=make_label
                 )
 
-            with chart_col2:
-                analysis_view = st.selectbox(
-                    "Analyze By",
-                    ["Category", "Payment Method", "Month"]
-                )
-            section_end()
+                selected_expense = get_expense_by_id(selected[0])
 
-            if analysis_view == "Category":
-                chart_data = (
-                    filtered_df.groupby("Category", as_index=False)["Amount"]
-                    .sum()
-                    .sort_values("Amount", ascending=False)
-                )
-                x_col = "Category"
-                title = "Spending by Category"
+                if selected_expense:
+                    current_id = selected_expense[0]
+                    current_name = selected_expense[1]
+                    current_category = selected_expense[2]
+                    current_amount = float(selected_expense[3])
+                    current_date = parse_date(selected_expense[4])
+                    current_payment = selected_expense[5]
+                    current_notes = selected_expense[6] or ""
 
-            elif analysis_view == "Payment Method":
-                chart_data = (
-                    filtered_df.groupby("Payment", as_index=False)["Amount"]
-                    .sum()
-                    .sort_values("Amount", ascending=False)
-                )
-                x_col = "Payment"
-                title = "Spending by Payment Method"
+                    col1, col2 = st.columns(2)
 
+                    with col1:
+                        new_name = st.text_input("Expense Name", value=current_name)
+                        new_category = st.selectbox(
+                            "Category",
+                            category_options,
+                            index=category_options.index(current_category)
+                        )
+                        new_amount = st.number_input(
+                            "Amount",
+                            value=current_amount,
+                            min_value=0.0,
+                            format="%.2f"
+                        )
+
+                    with col2:
+                        new_date = st.date_input("Date", value=current_date)
+                        new_payment = st.selectbox(
+                            "Payment Method",
+                            payment_options,
+                            index=payment_options.index(current_payment)
+                        )
+                        new_notes = st.text_area("Notes", value=current_notes)
+
+                    if st.button("Save Changes", use_container_width=True):
+                        update_expense(
+                            current_id,
+                            new_name,
+                            new_category,
+                            new_amount,
+                            str(new_date),
+                            new_payment,
+                            new_notes
+                        )
+                        st.success("Expense updated!")
+                        st.rerun()
             else:
-                month_df = filtered_df.copy()
-                month_df["Month"] = month_df["Date"].dt.to_period("M").astype(str)
-                chart_data = (
-                    month_df.groupby("Month", as_index=False)["Amount"]
-                    .sum()
-                    .sort_values("Month")
-                )
-                x_col = "Month"
-                title = "Monthly Spending Trend"
+                st.warning("No matching expenses found.")
+        else:
+            st.info("Enter a keyword like expense name, category, payment method, or notes.")
 
-            if chart_type == "Bar Chart":
-                fig = px.bar(
-                    chart_data,
-                    x=x_col,
-                    y="Amount",
-                    title=title,
-                    text_auto=".2f"
+    elif choice == "Delete Expense":
+        st.subheader("Delete Expense")
+
+        df = load_dataframe()
+
+        if not df.empty:
+            st.dataframe(df[["ID", "Name", "Category", "Amount", "Date"]], use_container_width=True)
+
+            data = view_expenses()
+            selected = st.selectbox(
+                "Select expense to delete",
+                data,
+                format_func=make_label
+            )
+
+            if st.button("Delete Expense", use_container_width=True):
+                delete_expense(selected[0])
+                st.success("Expense deleted!")
+                st.rerun()
+        else:
+            st.warning("No expenses found.")
+
+    elif choice == "Search Expense":
+        st.subheader("Search Expense")
+
+        keyword = st.text_input("Keyword")
+
+        if st.button("Search", use_container_width=True):
+            results = search_expenses(keyword)
+
+            if results:
+                df = pd.DataFrame(
+                    results,
+                    columns=["ID", "Name", "Category", "Amount", "Date", "Payment", "Notes"]
                 )
-            elif chart_type == "Pie Chart":
-                fig = px.pie(
-                    chart_data,
-                    names=x_col,
-                    values="Amount",
-                    title=title
-                )
+                st.dataframe(df, use_container_width=True)
             else:
-                fig = px.line(
-                    chart_data,
-                    x=x_col,
-                    y="Amount",
-                    title=title,
-                    markers=True
+                st.warning("No matching expenses found.")
+
+    elif choice == "Scan Receipt":
+        st.subheader("Scan Receipt")
+
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            st.write("### Upload From This Device")
+            uploaded_receipt = st.file_uploader(
+                "Upload receipt image",
+                type=["png", "jpg", "jpeg"],
+                key="desktop_receipt_upload"
+            )
+
+            if uploaded_receipt is not None:
+                render_receipt_result_from_upload(uploaded_receipt, "desktop_upload")
+
+        with col2:
+            st.write("### Upload by Scanning From Phone")
+
+            if st.button("Generate QR Code", use_container_width=True):
+                st.session_state.desktop_upload_token = str(uuid.uuid4())
+
+            token = st.session_state.desktop_upload_token
+
+            if token:
+                phone_upload_url = f"{APP_URL}?phone_upload={token}"
+                qr_bytes = generate_qr_code_bytes(phone_upload_url)
+
+                st.write("1. Scan the QR code with your phone")
+                st.write("2. Your phone opens the camera upload page")
+                st.write("3. Take the receipt picture on your phone")
+                st.write("4. Submit it on your phone")
+                st.write("5. Click the button below on your desktop")
+
+                st.image(qr_bytes, caption=phone_upload_url, width=280)
+                st.code(phone_upload_url)
+
+                if st.button("Check for uploaded receipt", use_container_width=True):
+                    uploaded_row = get_receipt_upload_by_token(token)
+
+                    if uploaded_row:
+                        image_bytes = uploaded_row[1]
+                        image = Image.open(BytesIO(image_bytes))
+                        st.success("Receipt received from phone.")
+                        render_receipt_result_from_pil(image, "phone_transfer")
+                    else:
+                        st.warning("No receipt uploaded yet. Upload from your phone first.")
+            else:
+                st.info("Click 'Generate QR Code' to start the phone upload flow.")
+
+    elif choice == "Reports":
+        st.subheader("Interactive Reports")
+
+        df = load_dataframe()
+
+        if not df.empty:
+            st.markdown("## Filters")
+
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+
+            with filter_col1:
+                min_date = df["Date"].min().date()
+                max_date = df["Date"].max().date()
+                date_range = st.date_input(
+                    "Date Range",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date
                 )
 
-            section_start("Chart")
-            st.plotly_chart(fig, use_container_width=True)
-            section_end()
-
-            tab1, tab2, tab3 = st.tabs(["Filtered Data", "Category Summary", "Payment Summary"])
-
-            with tab1:
-                st.dataframe(filtered_df, use_container_width=True, height=320)
-
-            with tab2:
-                category_summary = (
-                    filtered_df.groupby("Category")["Amount"]
-                    .agg(["sum", "mean", "count"])
-                    .reset_index()
+            with filter_col2:
+                selected_categories = st.multiselect(
+                    "Categories",
+                    options=sorted(df["Category"].dropna().unique().tolist()),
+                    default=sorted(df["Category"].dropna().unique().tolist())
                 )
-                category_summary.columns = ["Category", "Total", "Average", "Count"]
-                st.dataframe(category_summary, use_container_width=True)
 
-            with tab3:
-                payment_summary = (
-                    filtered_df.groupby("Payment")["Amount"]
-                    .agg(["sum", "mean", "count"])
-                    .reset_index()
+            with filter_col3:
+                selected_payments = st.multiselect(
+                    "Payment Methods",
+                    options=sorted(df["Payment"].dropna().unique().tolist()),
+                    default=sorted(df["Payment"].dropna().unique().tolist())
                 )
-                payment_summary.columns = ["Payment Method", "Total", "Average", "Count"]
-                st.dataframe(payment_summary, use_container_width=True)
-    else:
-        st.warning("No data available.")
+
+            filtered_df = df.copy()
+
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start_date, end_date = date_range
+                filtered_df = filtered_df[
+                    (filtered_df["Date"].dt.date >= start_date) &
+                    (filtered_df["Date"].dt.date <= end_date)
+                ]
+
+            if selected_categories:
+                filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
+
+            if selected_payments:
+                filtered_df = filtered_df[filtered_df["Payment"].isin(selected_payments)]
+
+            if filtered_df.empty:
+                st.warning("No data matches your filters.")
+            else:
+                st.markdown("## Summary")
+
+                total_spending = filtered_df["Amount"].sum()
+                total_transactions = len(filtered_df)
+                average_expense = filtered_df["Amount"].mean()
+                top_category = filtered_df.groupby("Category")["Amount"].sum().idxmax()
+
+                kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+                kpi1.metric("Total Spending", f"${total_spending:,.2f}")
+                kpi2.metric("Transactions", f"{total_transactions}")
+                kpi3.metric("Average Expense", f"${average_expense:,.2f}")
+                kpi4.metric("Top Category", top_category)
+
+                st.markdown("## Visualizations")
+
+                chart_col1, chart_col2 = st.columns(2)
+
+                with chart_col1:
+                    chart_type = st.selectbox(
+                        "Chart Type",
+                        ["Bar Chart", "Pie Chart", "Line Chart"]
+                    )
+
+                with chart_col2:
+                    analysis_view = st.selectbox(
+                        "Analyze By",
+                        ["Category", "Payment Method", "Month"]
+                    )
+
+                if analysis_view == "Category":
+                    chart_data = (
+                        filtered_df.groupby("Category", as_index=False)["Amount"]
+                        .sum()
+                        .sort_values("Amount", ascending=False)
+                    )
+                    x_col = "Category"
+                    title = "Spending by Category"
+
+                elif analysis_view == "Payment Method":
+                    chart_data = (
+                        filtered_df.groupby("Payment", as_index=False)["Amount"]
+                        .sum()
+                        .sort_values("Amount", ascending=False)
+                    )
+                    x_col = "Payment"
+                    title = "Spending by Payment Method"
+
+                else:
+                    month_df = filtered_df.copy()
+                    month_df["Month"] = month_df["Date"].dt.to_period("M").astype(str)
+                    chart_data = (
+                        month_df.groupby("Month", as_index=False)["Amount"]
+                        .sum()
+                        .sort_values("Month")
+                    )
+                    x_col = "Month"
+                    title = "Monthly Spending Trend"
+
+                if chart_type == "Bar Chart":
+                    fig = px.bar(
+                        chart_data,
+                        x=x_col,
+                        y="Amount",
+                        title=title,
+                        text_auto=".2f"
+                    )
+                    fig.update_layout(xaxis_title=x_col, yaxis_title="Amount")
+
+                elif chart_type == "Pie Chart":
+                    fig = px.pie(
+                        chart_data,
+                        names=x_col,
+                        values="Amount",
+                        title=title
+                    )
+
+                else:
+                    fig = px.line(
+                        chart_data,
+                        x=x_col,
+                        y="Amount",
+                        title=title,
+                        markers=True
+                    )
+                    fig.update_layout(xaxis_title=x_col, yaxis_title="Amount")
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                tab1, tab2, tab3 = st.tabs(["Filtered Data", "Category Summary", "Payment Summary"])
+
+                with tab1:
+                    st.dataframe(filtered_df, use_container_width=True)
+
+                with tab2:
+                    category_summary = (
+                        filtered_df.groupby("Category")["Amount"]
+                        .agg(["sum", "mean", "count"])
+                        .reset_index()
+                    )
+                    category_summary.columns = ["Category", "Total", "Average", "Count"]
+                    st.dataframe(category_summary, use_container_width=True)
+
+                with tab3:
+                    payment_summary = (
+                        filtered_df.groupby("Payment")["Amount"]
+                        .agg(["sum", "mean", "count"])
+                        .reset_index()
+                    )
+                    payment_summary.columns = ["Payment Method", "Total", "Average", "Count"]
+                    st.dataframe(payment_summary, use_container_width=True)
+        else:
+            st.warning("No data available.")
