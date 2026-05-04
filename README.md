@@ -136,7 +136,7 @@ pip install -r requirements.txt
 
 ## Author
 
-Kevin Cao, Nyi Tunn
+Kevin Cao, Nyi Tun
 
 ## License
 
