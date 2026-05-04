@@ -18,6 +18,8 @@ from database import (
     search_expenses,
     save_receipt_upload,
     get_receipt_upload_by_token,
+    set_budget,
+    get_budgets_for_month,
 )
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
@@ -90,6 +92,9 @@ payment_options = [
 
 if "desktop_upload_token" not in st.session_state:
     st.session_state.desktop_upload_token = None
+
+if "toast_message" not in st.session_state:
+    st.session_state.toast_message = None
 
 
 def parse_date(date_string):
@@ -345,6 +350,10 @@ else:
     st.title("Expense Tracker Dashboard")
     st.caption("Track, edit, analyze, and visualize your expenses")
 
+    if st.session_state.toast_message:
+        st.success(st.session_state.toast_message)
+        st.session_state.toast_message = None
+
     menu = [
         "Add Expense",
         "View Expenses",
@@ -352,6 +361,7 @@ else:
         "Delete Expense",
         "Search Expense",
         "Scan Receipt",
+        "Budget",
         "Reports"
     ]
 
@@ -373,16 +383,14 @@ else:
             notes = st.text_area("Notes")
 
         if st.button("Add Expense", use_container_width=True):
-            add_expense(
-                expense_name,
-                category,
-                amount,
-                str(date),
-                payment_method,
-                notes
-            )
-            st.success("Expense added!")
-            st.rerun()
+            if not expense_name.strip():
+                st.error("❌ Please enter an expense name.")
+            elif amount <= 0:
+                st.error("❌ Amount must be greater than $0.00.")
+            else:
+                add_expense(expense_name, category, amount, str(date), payment_method, notes)
+                st.session_state.toast_message = f"✅ '{expense_name}' added successfully!"
+                st.rerun()
 
     elif choice == "View Expenses":
         st.subheader("All Expenses")
@@ -461,17 +469,14 @@ else:
                         new_notes = st.text_area("Notes", value=current_notes)
 
                     if st.button("Save Changes", use_container_width=True):
-                        update_expense(
-                            current_id,
-                            new_name,
-                            new_category,
-                            new_amount,
-                            str(new_date),
-                            new_payment,
-                            new_notes
-                        )
-                        st.success("Expense updated!")
-                        st.rerun()
+                        if not new_name.strip():
+                            st.error("❌ Expense name cannot be empty.")
+                        elif new_amount <= 0:
+                            st.error("❌ Amount must be greater than $0.00.")
+                        else:
+                            update_expense(current_id, new_name, new_category, new_amount, str(new_date), new_payment, new_notes)
+                            st.session_state.toast_message = f"✅ '{new_name}' updated successfully!"
+                            st.rerun()
             else:
                 st.warning("No matching expenses found.")
         else:
@@ -493,8 +498,9 @@ else:
             )
 
             if st.button("Delete Expense", use_container_width=True):
+                expense_name_deleted = selected[1]
                 delete_expense(selected[0])
-                st.success("Expense deleted!")
+                st.session_state.toast_message = f"✅ '{expense_name_deleted}' deleted successfully!"
                 st.rerun()
         else:
             st.warning("No expenses found.")
@@ -505,16 +511,19 @@ else:
         keyword = st.text_input("Keyword")
 
         if st.button("Search", use_container_width=True):
-            results = search_expenses(keyword)
-
-            if results:
-                df = pd.DataFrame(
-                    results,
-                    columns=["ID", "Name", "Category", "Amount", "Date", "Payment", "Notes"]
-                )
-                st.dataframe(df, use_container_width=True)
+            if not keyword.strip():
+                st.warning("⚠️ Please enter a keyword to search.")
             else:
-                st.warning("No matching expenses found.")
+                results = search_expenses(keyword)
+                if results:
+                    st.success(f"✅ Found {len(results)} result(s) for '{keyword}'")
+                    df = pd.DataFrame(
+                        results,
+                        columns=["ID", "Name", "Category", "Amount", "Date", "Payment", "Notes"]
+                    )
+                    st.dataframe(df, use_container_width=True)
+                else:
+                    st.warning("No matching expenses found.")
 
     elif choice == "Scan Receipt":
         st.subheader("Scan Receipt")
@@ -565,6 +574,150 @@ else:
                         st.warning("No receipt uploaded yet. Upload from your phone first.")
             else:
                 st.info("Click 'Generate QR Code' to start the phone upload flow.")
+
+    elif choice == "Budget":
+        st.subheader("Monthly Budget Planner")
+
+        # Month selector
+        today = datetime.today()
+        selected_month = st.selectbox(
+            "Select Month",
+            options=[
+                (today.replace(month=m, day=1)).strftime("%Y-%m")
+                for m in range(1, 13)
+            ],
+            index=today.month - 1,
+            format_func=lambda m: datetime.strptime(m, "%Y-%m").strftime("%B %Y")
+        )
+
+        df_all = load_dataframe()
+        df_month = df_all[df_all["Date"].dt.strftime("%Y-%m") == selected_month] if not df_all.empty else pd.DataFrame(columns=["ID","Name","Category","Amount","Date","Payment","Notes"])
+        spent_by_cat = df_month.groupby("Category")["Amount"].sum().to_dict() if not df_month.empty else {}
+        total_spent = df_month["Amount"].sum() if not df_month.empty else 0.0
+
+        existing_budgets = get_budgets_for_month(selected_month)
+
+        st.markdown("---")
+        st.markdown("### 🎯 Set Budgets")
+        st.caption("Enter 0 to leave a category unbudgeted.")
+
+        overall_key = "OVERALL"
+        cols = st.columns(2)
+
+        with cols[0]:
+            overall_budget = st.number_input(
+                "Overall Monthly Budget ($)",
+                min_value=0.0,
+                value=float(existing_budgets.get(overall_key, 0.0)),
+                format="%.2f",
+                key="budget_overall"
+            )
+
+        st.markdown("**Per-Category Budgets**")
+        cat_cols = st.columns(3)
+        cat_budget_inputs = {}
+        for i, cat in enumerate(category_options):
+            with cat_cols[i % 3]:
+                cat_budget_inputs[cat] = st.number_input(
+                    f"{cat} ($)",
+                    min_value=0.0,
+                    value=float(existing_budgets.get(cat, 0.0)),
+                    format="%.2f",
+                    key=f"budget_{cat}"
+                )
+
+        if st.button("💾 Save Budgets", use_container_width=True):
+            set_budget(selected_month, overall_key, overall_budget)
+            for cat, amt in cat_budget_inputs.items():
+                set_budget(selected_month, cat, amt)
+            st.success("Budgets saved!")
+            st.rerun()
+
+        # ── Budget Status ──────────────────────────────────────────────
+        saved_budgets = get_budgets_for_month(selected_month)
+        saved_overall = saved_budgets.get(overall_key, 0.0)
+
+        st.markdown("---")
+        st.markdown("### 📊 Budget Status")
+
+        if saved_overall > 0:
+            remaining_overall = saved_overall - total_spent
+            pct_overall = min(total_spent / saved_overall, 1.0)
+            status_color = "#ef4444" if total_spent > saved_overall else ("#f59e0b" if pct_overall > 0.8 else "#22c55e")
+            delta_str = f"-${abs(remaining_overall):.2f} over" if remaining_overall < 0 else f"${remaining_overall:.2f} left"
+
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Overall Budget", f"${saved_overall:,.2f}")
+            col_b.metric("Total Spent", f"${total_spent:,.2f}")
+            col_c.metric("Remaining", f"${remaining_overall:,.2f}", delta=delta_str, delta_color="inverse")
+
+            st.markdown(f"**Overall progress: {pct_overall*100:.1f}%**")
+            st.progress(pct_overall)
+
+            if total_spent > saved_overall:
+                st.error(f"⚠️ You are **${total_spent - saved_overall:.2f} over** your overall monthly budget!")
+            elif pct_overall > 0.8:
+                st.warning(f"🔔 You've used **{pct_overall*100:.1f}%** of your budget. Only **${remaining_overall:.2f}** left.")
+            else:
+                st.success(f"✅ On track! **${remaining_overall:.2f}** remaining for the month.")
+        else:
+            st.info("No overall budget set for this month. Enter an amount above and save.")
+
+        # ── Per-Category Status ────────────────────────────────────────
+        st.markdown("#### Category Breakdown")
+        any_cat_budget = any(saved_budgets.get(c, 0) > 0 for c in category_options)
+
+        if any_cat_budget:
+            for cat in category_options:
+                cat_budget = saved_budgets.get(cat, 0.0)
+                cat_spent = spent_by_cat.get(cat, 0.0)
+                if cat_budget <= 0 and cat_spent == 0:
+                    continue
+
+                with st.expander(f"**{cat}**  —  spent ${cat_spent:.2f}" + (f" / ${cat_budget:.2f}" if cat_budget > 0 else " (no budget set)"), expanded=True):
+                    if cat_budget > 0:
+                        cat_remaining = cat_budget - cat_spent
+                        cat_pct = min(cat_spent / cat_budget, 1.0)
+                        bar_color = "🔴" if cat_spent > cat_budget else ("🟡" if cat_pct > 0.8 else "🟢")
+
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("Budget", f"${cat_budget:.2f}")
+                        c2.metric("Spent", f"${cat_spent:.2f}")
+                        c3.metric("Remaining", f"${cat_remaining:.2f}")
+
+                        st.progress(cat_pct)
+
+                        if cat_spent > cat_budget:
+                            st.error(f"{bar_color} **Over budget by ${cat_spent - cat_budget:.2f}**")
+                        elif cat_pct > 0.8:
+                            st.warning(f"{bar_color} **{cat_pct*100:.1f}% used** — only ${cat_remaining:.2f} left")
+                        else:
+                            st.success(f"{bar_color} **On track** — ${cat_remaining:.2f} remaining")
+
+                        # How this category influences the overall budget
+                        if saved_overall > 0:
+                            pct_of_total = (cat_spent / saved_overall * 100) if saved_overall > 0 else 0
+                            st.caption(f"📌 This category accounts for **{pct_of_total:.1f}%** of your overall budget (${saved_overall:.2f}).")
+
+                        # Individual expenses in this category this month
+                        cat_expenses = df_month[df_month["Category"] == cat]
+                        if not cat_expenses.empty:
+                            st.markdown("**Expenses this month:**")
+                            for _, row in cat_expenses.iterrows():
+                                pct_of_cat = (row["Amount"] / cat_budget * 100) if cat_budget > 0 else 0
+                                pct_of_overall = (row["Amount"] / saved_overall * 100) if saved_overall > 0 else 0
+                                note = f"  · {pct_of_cat:.1f}% of {cat} budget" if cat_budget > 0 else ""
+                                note += f",  {pct_of_overall:.1f}% of overall budget" if saved_overall > 0 else ""
+                                st.markdown(f"- **{row['Name']}** — ${row['Amount']:.2f} on {str(row['Date'])[:10]}{note}")
+                    else:
+                        st.caption("No budget set for this category.")
+                        if not df_month[df_month["Category"] == cat].empty:
+                            for _, row in df_month[df_month["Category"] == cat].iterrows():
+                                pct_of_overall = (row["Amount"] / saved_overall * 100) if saved_overall > 0 else 0
+                                note = f"  · {pct_of_overall:.1f}% of overall budget" if saved_overall > 0 else ""
+                                st.markdown(f"- **{row['Name']}** — ${row['Amount']:.2f} on {str(row['Date'])[:10]}{note}")
+        else:
+            st.info("Set per-category budgets above to see a category breakdown.")
 
     elif choice == "Reports":
         st.subheader("Interactive Reports")
