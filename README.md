@@ -1,4 +1,4 @@
-##Expense Tracker Application
+## Expense Tracker Application
 
 ## Overview
 
@@ -63,6 +63,90 @@ tesseract --version
 # Running the Application
 
 Step 1: Navigate to project folder
+```bash
+cd expense_tracker_project
+```
 
+Step 2: Run the application
+```bash
+python3 -m streamlit run app.py
+```
 
+Step 3: Open in browser
+```bash
+http://localhost:8501
+```
 
+## Using the Application
+
+# Add Expense
+
+Enter expense details and click “Add Expense” to save.
+
+# View Expenses
+
+Displays all stored expense records.
+
+# Edit Expense
+
+Search by keyword, select a record, and update fields.
+
+# Delete Expense
+
+Select an expense and remove it from the database.
+
+# Search Expense
+
+Search expenses by name, category, or keywords.
+
+# Scan Receipt
+
+* Upload an image of a receipt
+* System extracts text using OCR
+* Auto-fills expense form
+
+# QR Code Upload (Advanced Feature)
+
+* Generate QR code on desktop
+* Scan using phone
+* Upload receipt image from phone
+* Retrieve image on desktop
+
+⸻
+
+Notes
+
+* The SQLite database (expenses.db) is created automatically on first run
+* OCR accuracy depends on image quality
+* QR upload feature works best using the deployed version of the app
+
+⸻
+
+Troubleshooting
+
+Tesseract not found
+
+Ensure path is set in app.py:
+```py
+pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+```
+
+Module not found errors
+
+Run:
+```bash
+pip install -r requirements.txt
+```
+
+Data Source
+
+* Data is user-generated through the application
+* No external dataset is required
+
+# Author
+
+Kevin Cao, Nyi Tunn
+
+# License
+
+This project is for academic purposes only.
