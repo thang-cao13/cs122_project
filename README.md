@@ -16,7 +16,7 @@ The Expense Tracker Application is a data-driven system designed to help users r
 
 # Project Structure
 
-expense_tracker_project/
+expense_tracker_project/  
 │
 ├── app.py                # Main Streamlit application
 ├── database.py           # Database logic and schema
@@ -77,35 +77,35 @@ Step 3: Open in browser
 http://localhost:8501
 ```
 
-## Using the Application
+# Using the Application
 
-# Add Expense
+## Add Expense
 
 Enter expense details and click “Add Expense” to save.
 
-# View Expenses
+## View Expenses
 
 Displays all stored expense records.
 
-# Edit Expense
+## Edit Expense
 
 Search by keyword, select a record, and update fields.
 
-# Delete Expense
+## Delete Expense
 
 Select an expense and remove it from the database.
 
-# Search Expense
+## Search Expense
 
 Search expenses by name, category, or keywords.
 
-# Scan Receipt
+## Scan Receipt
 
 * Upload an image of a receipt
 * System extracts text using OCR
 * Auto-fills expense form
 
-# QR Code Upload (Advanced Feature)
+## QR Code Upload (Advanced Feature)
 
 * Generate QR code on desktop
 * Scan using phone
@@ -143,10 +143,10 @@ Data Source
 * Data is user-generated through the application
 * No external dataset is required
 
-# Author
+## Author
 
 Kevin Cao, Nyi Tunn
 
-# License
+## License
 
 This project is for academic purposes only.
