@@ -4,7 +4,7 @@
 
 The Expense Tracker Application is a data-driven system designed to help users record, manage, and analyze personal expenses. The system provides core database functionalities including adding, viewing, updating, deleting, and searching expenses, along with data visualization and receipt scanning using OCR.
 
-# Features
+## Features
 * Add new expenses with category, amount, date, and payment method
 * View all stored expenses in a structured table
 * Edit and update existing expense records
@@ -14,18 +14,19 @@ The Expense Tracker Application is a data-driven system designed to help users r
 * Upload and scan receipts using OCR
 * QR code-based receipt upload from mobile devices
 
-# Project Structure
+## Project Structure
 
+```
 expense_tracker_project/
-│
 ├── app.py            # Main Streamlit application
 ├── database.py       # Database logic and schema
 ├── expenses.db       # SQLite database (auto-created)
 ├── requirements.txt  # Python dependencies
 ├── packages.txt      # System dependencies (for deployment)
 └── README.md         # Project documentation
+```
 
-# Requirement
+## Requirement
 
 Python Version
 * Python 3.9 or higher
