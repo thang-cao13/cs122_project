@@ -16,14 +16,14 @@ The Expense Tracker Application is a data-driven system designed to help users r
 
 # Project Structure
 
-expense_tracker_project/  
+expense_tracker_project/
 │
-├── app.py                # Main Streamlit application
-├── database.py           # Database logic and schema
-├── expenses.db           # SQLite database (auto-created)
-├── requirements.txt      # Python dependencies
-├── packages.txt          # System dependencies (for deployment)
-└── README.md             # Project documentation
+├── app.py            # Main Streamlit application
+├── database.py       # Database logic and schema
+├── expenses.db       # SQLite database (auto-created)
+├── requirements.txt  # Python dependencies
+├── packages.txt      # System dependencies (for deployment)
+└── README.md         # Project documentation
 
 # Requirement
 
@@ -80,49 +80,39 @@ http://localhost:8501
 # Using the Application
 
 ## Add Expense
-
 Enter expense details and click “Add Expense” to save.
 
 ## View Expenses
-
 Displays all stored expense records.
 
 ## Edit Expense
-
 Search by keyword, select a record, and update fields.
 
 ## Delete Expense
-
 Select an expense and remove it from the database.
 
 ## Search Expense
-
 Search expenses by name, category, or keywords.
 
 ## Scan Receipt
-
 * Upload an image of a receipt
 * System extracts text using OCR
 * Auto-fills expense form
 
 ## QR Code Upload (Advanced Feature)
-
 * Generate QR code on desktop
 * Scan using phone
 * Upload receipt image from phone
 * Retrieve image on desktop
 
-⸻
-
-Notes
+## Notes
 
 * The SQLite database (expenses.db) is created automatically on first run
 * OCR accuracy depends on image quality
 * QR upload feature works best using the deployed version of the app
 
-⸻
 
-Troubleshooting
+## Troubleshooting
 
 Tesseract not found
 
@@ -138,7 +128,7 @@ Run:
 pip install -r requirements.txt
 ```
 
-Data Source
+## Data Source
 
 * Data is user-generated through the application
 * No external dataset is required
