@@ -28,8 +28,43 @@ def create_tables():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS budgets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        month TEXT NOT NULL,
+        category TEXT NOT NULL,
+        budget_amount REAL NOT NULL,
+        UNIQUE(month, category)
+    )
+    """)
+
     conn.commit()
     conn.close()
+
+
+def set_budget(month, category, budget_amount):
+    conn = sqlite3.connect("expenses.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO budgets (month, category, budget_amount)
+    VALUES (?, ?, ?)
+    ON CONFLICT(month, category) DO UPDATE SET budget_amount = excluded.budget_amount
+    """, (month, category, budget_amount))
+
+    conn.commit()
+    conn.close()
+
+
+def get_budgets_for_month(month):
+    conn = sqlite3.connect("expenses.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT category, budget_amount FROM budgets WHERE month = ?", (month,))
+    rows = cursor.fetchall()
+
+    conn.close()
+    return {row[0]: row[1] for row in rows}
 
 
 def add_expense(expense_name, category, amount, date, payment_method, notes):
