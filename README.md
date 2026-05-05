@@ -15,6 +15,7 @@ This project is a personal expense tracking system that allows users to record, 
 ---
 
 ## Project Structure
+```
 expense_tracker_project/
 ├── app.py
 ├── database.py
@@ -22,7 +23,7 @@ expense_tracker_project/
 ├── requirements.txt
 ├── packages.txt
 └── README.md
-
+```
 ---
 
 ## Requirements
