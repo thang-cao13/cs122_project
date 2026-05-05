@@ -1,0 +1,9 @@
+streamlit
+pandas
+plotly
+xarray
+packaging<25
+protobuf<6
+pillow
+pytesseract
+qrcode
